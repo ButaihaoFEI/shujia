@@ -2,8 +2,8 @@ USE shujia;
 
 
 -- 插入csv 数据到表中
-DROP TABLE IF EXISTS dw_tb_problem_score_v1;
-CREATE external TABLE IF NOT EXISTS dw_tb_problem_score_v1(
+DROP TABLE IF EXISTS dw_tb_stu_problem_score_v1;
+CREATE external TABLE IF NOT EXISTS dw_tb_stu_problem_score_v1(
 	examid STRING COMMENT '试卷ID',
 	studentid STRING COMMENT '学生ID',
 	studentname STRING COMMENT '学生姓名',
@@ -16,19 +16,19 @@ ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ',';
 -- .csv文件本地路径如下
 LOAD DATA LOCAL INPATH '/data/shujia/14304_test.csv'
-INTO TABLE dw_tb_problem_score_v1;
+INTO TABLE dw_tb_stu_problem_score_v1;
 
 
 -- 试卷号ID
 DROP VIEW IF EXISTS view_examid;
 CREATE VIEW IF NOT EXISTS view_examid AS
-SELECT examid FROM dw_tb_problem_score_v1
+SELECT examid FROM dw_tb_stu_problem_score_v1
 LIMIT 1;
 -- 考纲号ID
 DROP VIEW IF EXISTS view_syllabusid;
 CREATE VIEW IF NOT EXISTS view_syllabusid AS
 SELECT DISTINCT syllabusid
-FROM tb_exam AS t1 JOIN dw_tb_problem_score_v1 AS t2
+FROM tb_exam AS t1 JOIN dw_tb_stu_problem_score_v1 AS t2
 ON t1.id = t2.examid;
 
 
@@ -43,6 +43,26 @@ INSERT INTO TABLE dw_tb_problem_v1
 SELECT id,questionno,score
 FROM tb_exam_question AS t1 JOIN view_examid AS v1
 ON  t1.examid = v1.examid;
+
+--本次学生题目得分情况表2.0 增加题目ID，题目分值，题目得分率，按总分排名，题目顺序排序
+DROP TABLE IF EXISTS dw_tb_stu_problem_score_v2;
+CREATE external TABLE IF NOT EXISTS dw_tb_stu_problem_score_v2(
+	studentid STRING COMMENT '学生ID',
+	studentname STRING COMMENT '学生姓名',
+	totalscore FLOAT COMMENT '试卷总分',
+	classrank INT COMMENT '班级排名',
+	problemid STRING COMMENT '试题ID',
+	problemnumber INT COMMENT '本次试卷试题号 eg. 1-20',
+	studentscore FLOAT	COMMENT '试题得分',
+	problemscore FLOAT COMMENT '试题分值',
+	problemrate FLOAT COMMENT '试题得分率'
+);
+INSERT INTO TABLE dw_tb_stu_problem_score_v2
+SELECT t1.studentid,t1.studentname,t1.totalscore,t1.classrank,t2.problemid,t1.problemnumber,t1.studentscore,t2.problemscore,(t1.studentscore/t2.problemscore) AS problemrate
+FROM dw_tb_stu_problem_score_v1 AS t1
+JOIN dw_tb_problem_v1 AS t2
+ON t1.problemnumber = t2.problemnumber
+ORDER BY t1.classrank ASC, t1.problemnumber ASC;
 
 
 --本次试题知识点关系表 本次所遇到的试题及对应的知识点
@@ -89,7 +109,7 @@ JOIN view_syllabusid AS v1 ON t1.syllabusid = v1.syllabusid
 JOIN dw_tb_question_point AS t2 ON t1.pointid = t2.pointid;
 
 
--- 本次知识点表3.0 计算知识点分值
+-- 本次知识点表2.0 计算知识点分值
 DROP TABLE IF EXISTS dw_tb_point_v2;
 CREATE external TABLE IF NOT EXISTS dw_tb_point_v2(
 	pointid STRING COMMENT '知识点ID',
@@ -112,25 +132,10 @@ JOIN dw_tb_point_v1 AS t4
 ON t3.pointid = t4.pointid;
 
 
-
-
-
-
-
-
-
-
-
-DROP TABLE IF EXISTS dw_tb_problem_score_v2;
-CREATE external TABLE IF NOT EXISTS dw_tb_problem_score_v2(
-	examid STRING COMMENT '试卷ID',
-	studentid STRING COMMENT '学生ID',
-	studentname STRING COMMENT '学生姓名',
-	totalscore FLOAT COMMENT '试卷总分',
-	classrank INT COMMENT '班级排名',
-	problemid STRING COMMENT '试题ID',
-	problemnumber INT COMMENT '本次试卷试题号 eg. 1-20',
-	problemscore FLOAT	COMMENT '试题得分',
-	score FLOAT COMMENT '试题总分',
-	problemrate FLOAT COMMENT '试题得分比率'
-);
+--本次学生知识点得分情况表
+SELECT t2.pointid,SUM(t1.problemscore*t2.proportion)
+FROM dw_tb_stu_problem_score_v1 AS t1
+JOIN dw_tb_question_point_v2 AS t2
+ON t1.problemid = t2.problemid
+GROUP BY t2.pointid
+LIMIT 50;
