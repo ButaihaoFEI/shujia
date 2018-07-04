@@ -76,6 +76,7 @@ SELECT problemid,pointid
 FROM tb_exam_question_point AS t1 JOIN dw_tb_problem_v1 AS t2
 ON  t1.examquestionid = t2.problemid;
 
+
 --本次试题知识点关系表2.0 添加试题包含知识点占比，一题中有几个知识点
 DROP TABLE IF EXISTS dw_tb_question_point_v2;
 CREATE external TABLE IF NOT EXISTS dw_tb_question_point_v2(
@@ -133,9 +134,18 @@ ON t3.pointid = t4.pointid;
 
 
 --本次学生知识点得分情况表
-SELECT t2.pointid,SUM(t1.problemscore*t2.proportion)
-FROM dw_tb_stu_problem_score_v1 AS t1
+--正在进行多维钻取
+SELECT t4.studentid,t4.studentname,t3.pointid,t5.pointname,t3.studentpointscore,t5.pointscore,(t3.studentpointscore/t5.pointscore) AS pointrate
+FROM
+(SELECT t1.studentid,t2.pointid,SUM(t1.problemscore*t2.proportion) AS studentpointscore
+FROM dw_tb_stu_problem_score_v2 AS t1
 JOIN dw_tb_question_point_v2 AS t2
 ON t1.problemid = t2.problemid
-GROUP BY t2.pointid
-LIMIT 50;
+GROUP BY t2.pointid,t1.studentid
+GROUPING SETS((t2.pointid,t1.studentid),t2.pointid,t1.studentid,())
+) AS t3
+JOIN dw_tb_stu_problem_score_v2 AS t4
+ON t3.studentid = t4.studentid
+JOIN dw_tb_point_v2 AS t5
+ON t3.pointid = t5.pointid
+
