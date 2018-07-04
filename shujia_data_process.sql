@@ -9,8 +9,8 @@ CREATE external TABLE IF NOT EXISTS dw_tb_problem_score_v1(
 	studentname STRING COMMENT '学生姓名',
 	totalscore FLOAT COMMENT '试卷总分',
 	classrank INT COMMENT '班级排名',
-	problemid INT COMMENT '本次试卷试题号 eg. 1-20',
-	score FLOAT	COMMENT '试题得分'
+	problemnumber INT COMMENT '本次试卷试题号 eg. 1-20',
+	studentscore FLOAT	COMMENT '试题得分'
 )
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ',';
@@ -36,10 +36,11 @@ ON t1.id = t2.examid;
 DROP TABLE IF EXISTS dw_tb_problem_v1;
 CREATE external TABLE IF NOT EXISTS dw_tb_problem_v1(
 	problemid STRING COMMENT '本次试题ID',
-	score FLOAT COMMENT '本试题分值'
+	problemnumber INT COMMENT '本次试题卷面编号',
+	problemscore FLOAT COMMENT '本试题分值'
 );
 INSERT INTO TABLE dw_tb_problem_v1
-SELECT id,score
+SELECT id,questionno,score
 FROM tb_exam_question AS t1 JOIN view_examid AS v1
 ON  t1.examid = v1.examid;
 

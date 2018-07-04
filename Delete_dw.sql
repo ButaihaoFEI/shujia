@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS dw_tb_problem_score_v1;
+DROP VIEW IF EXISTS view_examid;
+DROP VIEW IF EXISTS view_syllabusid;
+DROP TABLE IF EXISTS dw_tb_problem_v1;
+DROP TABLE IF EXISTS dw_tb_point_v1;
+DROP TABLE IF EXISTS dw_tb_problem_v2;
+DROP TABLE IF EXISTS dw_tb_problem_v3;
+DROP TABLE IF EXISTS dw_tb_point_v2;
+DROP TABLE IF EXISTS dw_tb_point_v3;
+DROP TABLE IF EXISTS dw_tb_problem_score_v2;
