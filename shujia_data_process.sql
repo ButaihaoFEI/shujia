@@ -184,9 +184,42 @@ ON t3.studentid = t4.studentid
 JOIN dw_tb_point_v2 AS t5
 ON t3.pointid = t5.pointid;
 
-SELECT t1.studentid,t2.pointid,SUM(t1.problemscore*t2.proportion) AS studentpointscore
-FROM dw_tb_stu_problem_score_v2 AS t1
-JOIN dw_tb_question_point_v2 AS t2
-ON t1.problemid = t2.problemid
-GROUP BY t1.studentid,t2.pointid
-LIMIT 50
+--得分区间表，区间从excel中设立
+DROP TABLE IF EXISTS dw_tb_scoreinterval_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval_v1(
+totalscore int COMMENT '得分区间',
+interval_min int COMMENT '区间最小值',
+interval_max int COMMENT '区间最大值'
+)
+ROW FORMAT DELIMITED
+FIELDS TERMINATED BY ','
+LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval_v1';
+LOAD DATA LOCAL INPATH '/data/shujia/dw_tb_scoreinterval.csv'
+INTO TABLE dw_tb_scoreinterval_v1;
+
+
+
+
+--得分区间2.0
+DROP TABLE IF EXISTS dw_tb_scoreinterval_v2;
+CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval_v2(
+totalscore int COMMENT '得分区间',
+student int COMMENT '该区间内学生人数',
+pointid STRING,
+pointrate_avg FLOAT COMMENT '该区间内学生该知识点平均得分率'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval_v2';
+INSERT INTO TABLE dw_tb_scoreinterval_v2
+SELECT t4.totalscore,COUNT(t3.studentid),t3.pointid,AVG(t3.pointrate)
+FROM
+dw_tb_scoreinterval_v1 AS t4
+JOIN
+(SELECT t2.studentid,t2.studentname,totalscore,pointid,pointname,pointrate
+FROM dw_tb_stu_v1 AS t1
+JOIN dw_tb_stu_point_score_v1 AS t2
+ON t1.studentid = t2.studentid) AS t3
+WHERE (t3.totalscore >= t4.interval_min) AND (t3.totalscore <= t4.interval_max)
+GROUP BY t4.totalscore,T3.pointid;
+
+SELECT * FROM dw_tb_scoreinterval_v2
+WHERE totalscore=105;
