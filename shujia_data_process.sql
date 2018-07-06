@@ -127,7 +127,7 @@ frequency INT COMMENT '出现频率'
 )
 LOCATION '/user/hadoop/shujia/dw/dw_tb_point_v1';
 INSERT INTO TABLE dw_tb_point_v1
-SELECT t2.pointid,pointname,parentid,topid,classhour,frequency
+SELECT t2.pointid,pointname,parentid,topid,classhour,replace(replace(replace(frequency,2,10),3,50),4,250)
 FROM tb_syllabus_points AS t1 
 JOIN view_syllabusid AS v1 ON t1.syllabusid = v1.syllabusid
 JOIN dw_tb_question_point_v2 AS t2 ON t1.pointid = t2.pointid;
@@ -221,12 +221,56 @@ WHERE (t3.totalscore >= t4.interval_min) AND (t3.totalscore <= t4.interval_max)
 GROUP BY t4.totalscore,T3.pointid;
 
 
-SELECT t3.studentid,t3.studentname,t3.totalscore,t3.pointid,t3.pointname,t3.studentpointrate,t4.totalscore AS scoreintervalpointrate
+--推荐指标表1.0
+DROP TABLE IF EXISTS dw_tb_stu_recommand_point_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_stu_recommand_point_v1(
+studentid STRING COMMENT '学生ID',
+studentname STRING COMMENT '学生姓名',
+totalscore INT COMMENT '学生总分',
+pointid STRING COMMENT '学生欠缺知识点ID',
+pointname STRING COMMENT '知识点名称',
+studentpointrate FLOAT COMMENT '学生该知识点得分率',
+scoreintervalpointrate FLOAT COMMENT'学生所在区间知识点得分率',
+difference FLOAT COMMENT'学生所在区间该知识点得分率与学生该知识点得分率差值'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_recommand_point_v1';
+INSERT INTO TABLE dw_tb_stu_recommand_point_v1
+SELECT t3.studentid,t3.studentname,t3.totalscore,t3.pointid,t3.pointname,t3.studentpointrate,t4.pointrate_avg AS scoreintervalpointrate, ROUND(t4.pointrate_avg - t3.studentpointrate,2) AS difference, 
 FROM(SELECT t2.studentid,t2.studentname,t1.totalscore,t2.pointid,t2.pointname,t2.pointrate AS studentpointrate
 FROM dw_tb_stu_v1 AS t1
 JOIN dw_tb_stu_point_score_v1 AS t2
 ON t1.studentid=t2.studentid
 ORDER BY t1.totalscore DESC) AS t3
-JOIN dw_tb_scoreinterval_v2 AS t4
-WHERE t3.totalscore = t4.totalscore
-LIMIT 50;
+LEFT JOIN dw_tb_scoreinterval_v2 AS t4
+ON t3.pointid = t4.pointid
+WHERE t3.totalscore = t4.totalscore AND t3.studentpointrate < t4.pointrate_avg
+ORDER BY t3.totalscore DESC,t3.studentname,difference DESC;
+
+
+
+--推荐指标表2.0
+DROP TABLE IF EXISTS dw_tb_stu_recommand_point_v2;
+CREATE TABLE IF NOT EXISTS dw_tb_stu_recommand_point_v2(
+studentid STRING COMMENT '学生ID',
+studentname STRING COMMENT '学生姓名',
+totalscore INT COMMENT '学生总分',
+pointid STRING COMMENT '学生欠缺知识点ID',
+pointname STRING COMMENT '知识点名称',
+studentpointrate FLOAT COMMENT '学生该知识点得分率',
+scoreintervalpointrate FLOAT COMMENT'学生所在区间知识点得分率',
+difference FLOAT COMMENT'学生所在区间该知识点得分率与学生该知识点得分率差值',
+t_value FLOAT COMMENT '学时',
+differencescore FLOAT COMMENT '分值差距',
+frequency INT COMMENT '频率'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_recommand_point_v2';
+INSERT INTO TABLE dw_tb_stu_recommand_point_v2
+SELECT studentid,studentname,totalscore,t1.pointid,t1.pointname,studentpointrate,scoreintervalpointrate,difference,((1/3 * POWER(scoreintervalpointrate,3) - 1/2 * POWER(scoreintervalpointrate,2) + 1/4 * scoreintervalpointrate) - (1/3 * POWER(studentpointrate,3) - 1/2 * POWER(studentpointrate,2) + 1/4 * studentpointrate)) *12 * classhour AS t, difference * pointscore AS diffeencescore, frequency
+FROM dw_tb_point_v2 AS t1
+RIGHT JOIN dw_tb_stu_recommand_point_v1 AS t2
+ON t1.pointid = t2.pointid;
+
+SELECT t1.studentname,difference,t_value,differencescore,frequency FROM dw_tb_stu_recommand_point_v2 AS t1
+JOIN dw_tb_stu_v1 AS t2
+ON t1.studentid = t2.studentid
+WHERE classrank = 7;
