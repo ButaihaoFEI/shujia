@@ -266,9 +266,8 @@ frequency INT COMMENT '频率'
 )
 LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_recommand_point_v2';
 INSERT INTO TABLE dw_tb_stu_recommand_point_v2
-SELECT studentid,studentname,totalscore,t1.pointid,t1.pointname,studentpointrate,scoreintervalpointrate,difference,ROUND((((1/3) * POWER(scoreintervalpointrate,3) - (1/2) * POWER(scoreintervalpointrate,2) + (1/4) * scoreintervalpointrate) - ((1/3) * POWER(studentpointrate,3) - (1/2) * POWER(studentpointrate,2) + (1/4) * studentpointrate)) *12 * classhour,2) AS t, difference * pointscore AS differencescore, frequency
+SELECT studentid,studentname,totalscore,t1.pointid,t1.pointname,studentpointrate,scoreintervalpointrate,difference,ROUND((((1/3) * POWER(scoreintervalpointrate,3) - (1/2) * POWER(scoreintervalpointrate,2) + (1/4) * scoreintervalpointrate) - ((1/3) * POWER(studentpointrate,3) - (1/2) * POWER(studentpointrate,2) + (1/4) * studentpointrate)) *12 * classhour * 2,0)/2 +0.5 AS t, difference * pointscore AS differencescore, frequency
 FROM dw_tb_point_v2 AS t1
 RIGHT JOIN dw_tb_stu_recommand_point_v1 AS t2
-ON t1.pointid = t2.pointid;
-
-
+ON t1.pointid = t2.pointid
+ORDER BY totalscore DESC,differencescore*frequency/t DESC;
