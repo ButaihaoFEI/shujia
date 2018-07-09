@@ -186,39 +186,40 @@ ON t3.pointid = t5.pointid;
 
 
 --得分区间表，区间从excel中设立
-DROP TABLE IF EXISTS dw_tb_scoreinterval_v1;
-CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval_v1(
+DROP TABLE IF EXISTS dw_tb_scoreinterval_point_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval_point_v1(
 totalscore int COMMENT '得分区间',
 interval_min int COMMENT '区间最小值',
 interval_max int COMMENT '区间最大值'
 )
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
-LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval_v1';
+LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval_point_v1';
 LOAD DATA LOCAL INPATH '/data/shujia/dw_tb_scoreinterval.csv'
-INTO TABLE dw_tb_scoreinterval_v1;
+INTO TABLE dw_tb_scoreinterval_point_v1;
 
 
 --得分区间2.0
-DROP TABLE IF EXISTS dw_tb_scoreinterval_v2;
-CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval_v2(
+DROP TABLE IF EXISTS dw_tb_scoreinterval_point_v2;
+CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval_point_v2(
 totalscore int COMMENT '得分区间',
 student int COMMENT '该区间内学生人数',
 pointid STRING,
 pointrate_avg FLOAT COMMENT '该区间内学生该知识点平均得分率'
 )
-LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval_v2';
-INSERT INTO TABLE dw_tb_scoreinterval_v2
-SELECT t4.totalscore,COUNT(t3.studentid),t3.pointid,AVG(t3.pointrate)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval_point_v2';
+INSERT INTO TABLE dw_tb_scoreinterval_point_v2
+SELECT t4.totalscore,COUNT(t3.studentid),t3.pointid,IF(COUNT(t3.studentid) >1,AVG(t3.pointrate),t4.totalscore/150)
 FROM
-dw_tb_scoreinterval_v1 AS t4
+dw_tb_scoreinterval_point_v1 AS t4
 JOIN
 (SELECT t2.studentid,t2.studentname,totalscore,pointid,pointname,pointrate
 FROM dw_tb_stu_v1 AS t1
 JOIN dw_tb_stu_point_score_v1 AS t2
 ON t1.studentid = t2.studentid) AS t3
 WHERE (t3.totalscore >= t4.interval_min) AND (t3.totalscore <= t4.interval_max)
-GROUP BY t4.totalscore,T3.pointid;
+GROUP BY t4.totalscore,t3.pointid;
+
 
 
 --推荐指标表1.0
@@ -235,15 +236,15 @@ difference FLOAT COMMENT'学生所在区间该知识点得分率与学生该知�
 )
 LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_recommand_point_v1';
 INSERT INTO TABLE dw_tb_stu_recommand_point_v1
-SELECT t3.studentid,t3.studentname,t3.totalscore,t3.pointid,t3.pointname,t3.studentpointrate,t4.pointrate_avg AS scoreintervalpointrate, ROUND(t4.pointrate_avg - t3.studentpointrate,2) AS difference, 
+SELECT t3.studentid,t3.studentname,t3.totalscore,t3.pointid,t3.pointname,t3.studentpointrate,t4.pointrate_avg AS scoreintervalpointrate, ROUND(t4.pointrate_avg - t3.studentpointrate,2) AS difference
 FROM(SELECT t2.studentid,t2.studentname,t1.totalscore,t2.pointid,t2.pointname,t2.pointrate AS studentpointrate
 FROM dw_tb_stu_v1 AS t1
 JOIN dw_tb_stu_point_score_v1 AS t2
 ON t1.studentid=t2.studentid
 ORDER BY t1.totalscore DESC) AS t3
-LEFT JOIN dw_tb_scoreinterval_v2 AS t4
+LEFT JOIN dw_tb_scoreinterval_point_v2 AS t4
 ON t3.pointid = t4.pointid
-WHERE t3.totalscore = t4.totalscore AND t3.studentpointrate < t4.pointrate_avg
+WHERE t3.totalscore = t4.totalscore AND t3.studentpointrate < t4.pointrate_avg 
 ORDER BY t3.totalscore DESC,t3.studentname,difference DESC;
 
 
@@ -265,12 +266,9 @@ frequency INT COMMENT '频率'
 )
 LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_recommand_point_v2';
 INSERT INTO TABLE dw_tb_stu_recommand_point_v2
-SELECT studentid,studentname,totalscore,t1.pointid,t1.pointname,studentpointrate,scoreintervalpointrate,difference,((1/3 * POWER(scoreintervalpointrate,3) - 1/2 * POWER(scoreintervalpointrate,2) + 1/4 * scoreintervalpointrate) - (1/3 * POWER(studentpointrate,3) - 1/2 * POWER(studentpointrate,2) + 1/4 * studentpointrate)) *12 * classhour AS t, difference * pointscore AS diffeencescore, frequency
+SELECT studentid,studentname,totalscore,t1.pointid,t1.pointname,studentpointrate,scoreintervalpointrate,difference,ROUND((((1/3) * POWER(scoreintervalpointrate,3) - (1/2) * POWER(scoreintervalpointrate,2) + (1/4) * scoreintervalpointrate) - ((1/3) * POWER(studentpointrate,3) - (1/2) * POWER(studentpointrate,2) + (1/4) * studentpointrate)) *12 * classhour,2) AS t, difference * pointscore AS differencescore, frequency
 FROM dw_tb_point_v2 AS t1
 RIGHT JOIN dw_tb_stu_recommand_point_v1 AS t2
 ON t1.pointid = t2.pointid;
 
-SELECT t1.studentname,difference,t_value,differencescore,frequency FROM dw_tb_stu_recommand_point_v2 AS t1
-JOIN dw_tb_stu_v1 AS t2
-ON t1.studentid = t2.studentid
-WHERE classrank = 7;
+
