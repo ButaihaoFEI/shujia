@@ -271,3 +271,61 @@ FROM dw_tb_point_v2 AS t1
 RIGHT JOIN dw_tb_stu_recommand_point_v1 AS t2
 ON t1.pointid = t2.pointid
 ORDER BY totalscore DESC,differencescore*frequency/t DESC;
+
+
+--划分简单题，非简单题
+--计算每道题的班级平均分
+--平均分大于0.7为简单题，标签为1,非简单题为0
+--题目表2.0
+DROP TABLE IF EXISTS dw_tb_problem_v2;
+CREATE TABLE IF NOT EXISTS dw_tb_problem_v2(
+problemid STRING COMMENT '本次试题ID',
+problemnumber INT COMMENT '本次试题卷面编号',
+problemscore FLOAT COMMENT '本试题分值',
+studentscorerate_avg FLOAT COMMENT '该题班级平均分',
+problemtag INT COMMENT '简单题 - 1，非简单题 - 0 标签'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_problem_v2';
+INSERT INTO TABLE dw_tb_problem_v2
+SELECT t2.problemid,problemnumber,problemscore,ROUND(studentscorerate_avg,2),IF(studentscorerate_avg>0.7,1,0)
+FROM
+(SELECT problemid,AVG(problemrate) AS studentscorerate_avg
+FROM dw_tb_stu_problem_score_v2
+GROUP BY problemid) AS t1
+JOIN dw_tb_problem_v1 AS t2
+ON t1.problemid = t2.problemid
+ORDER BY problemnumber ASC;
+
+--给学生打上相应标签（发挥失常，能力有限）
+
+DROP TABLE IF EXISTS dw_tmp_student_score_tag;
+CREATE TABLE IF NOT EXISTS dw_tmp_student_score_tag(
+studentid STRING COMMENT '学生ID',
+problemtag INT COMMENT '题目标签 简单题 - 1，非简单题 - 0 标签',
+studentscore FLOAT COMMENT '该标签学生得分',
+studentscore_avg FLOAT COMMENT '该标签班级平均分',
+studentscore_std FLOAT COMMENT '该标签班级得分标准差'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tmp_student_score_tag';
+INSERT INTO TABLE dw_tmp_student_score_tag
+SELECT t4.studentid,t4.problemtag,t4.studentscore,t5.studentscore_avg,t5.studentscore_std
+FROM 
+(
+--班级平均分，标准差
+SELECT problemtag,SUM(problemscore * studentscorerate_avg) AS studentscore_avg, STDDEV(problemscore * studentscorerate_avg) AS studentscore_std
+FROM dw_tb_problem_v2 
+GROUP BY problemtag) AS t5
+JOIN
+(
+--学生简单题，非简单题得分
+SELECT t3.studentid,t3.problemtag,SUM(studentscore) AS studentscore
+FROM(
+SELECT t2.studentid,t2.studentname,t1.problemnumber,t2.studentscore,t1.problemtag
+FROM dw_tb_problem_v2 AS t1
+RIGHT JOIN dw_tb_stu_problem_score_v2 AS t2
+ON t1.problemnumber = t2.problemnumber) AS t3
+GROUP BY studentid,problemtag
+DISTRIBUTE BY studentid SORT BY studentid,problemtag ) AS t4
+
+ON t4.problemtag = t5.problemtag
+LIMIT 50
