@@ -1,5 +1,9 @@
 USE shujia;
+--map join open
+SET hive.auto.convert.join = TRUE;
 
+--local mode
+SET hvie.exec.mode.local.auto = TRUE;
 
 -- 插入csv 数据到表中
 DROP TABLE IF EXISTS dw_tb_stu_problem_score_v1;
@@ -268,9 +272,9 @@ LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_recommand_point_v2';
 INSERT INTO TABLE dw_tb_stu_recommand_point_v2
 SELECT studentid,studentname,totalscore,t1.pointid,t1.pointname,studentpointrate,scoreintervalpointrate,difference,ROUND((((1/3) * POWER(scoreintervalpointrate,3) - (1/2) * POWER(scoreintervalpointrate,2) + (1/4) * scoreintervalpointrate) - ((1/3) * POWER(studentpointrate,3) - (1/2) * POWER(studentpointrate,2) + (1/4) * studentpointrate)) *12 * classhour * 2,0)/2 +0.5 AS t, difference * pointscore AS differencescore, frequency
 FROM dw_tb_point_v2 AS t1
-RIGHT JOIN dw_tb_stu_recommand_point_v1 AS t2
+JOIN dw_tb_stu_recommand_point_v1 AS t2
 ON t1.pointid = t2.pointid
-ORDER BY totalscore DESC,differencescore*frequency/t DESC;
+ORDER BY totalscore DESC,studentname,differencescore*frequency/t DESC;
 
 
 --划分简单题，非简单题
@@ -298,6 +302,7 @@ ORDER BY problemnumber ASC;
 
 --给学生打上相应标签（发挥失常，能力有限）
 
+
 DROP TABLE IF EXISTS dw_tmp_student_score_tag;
 CREATE TABLE IF NOT EXISTS dw_tmp_student_score_tag(
 studentid STRING COMMENT '学生ID',
@@ -322,10 +327,17 @@ SELECT t3.studentid,t3.problemtag,SUM(studentscore) AS studentscore
 FROM(
 SELECT t2.studentid,t2.studentname,t1.problemnumber,t2.studentscore,t1.problemtag
 FROM dw_tb_problem_v2 AS t1
-RIGHT JOIN dw_tb_stu_problem_score_v2 AS t2
+JOIN dw_tb_stu_problem_score_v2 AS t2
 ON t1.problemnumber = t2.problemnumber) AS t3
 GROUP BY studentid,problemtag
 DISTRIBUTE BY studentid SORT BY studentid,problemtag ) AS t4
+ON t4.problemtag = t5.problemtag;
 
-ON t4.problemtag = t5.problemtag
-LIMIT 50
+
+
+-- 插入表
+INSERT INTO TABLE tb_exam_student_points_scheme_detail
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-",""),examid,studentid,pointid,INT((scoreintervalpointrate-studentpointrate) * 100),t_value,INT(studentpointrate * 100),INT(scoreintervalpointrate * 100),1
+FROM view_examid  
+JOIN dw_tb_stu_recommand_point_v2;
+
