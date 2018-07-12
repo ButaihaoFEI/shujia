@@ -230,7 +230,6 @@ ON t1.problemid = t2.problemid
 GROUP BY t2.questiontypeid) AS t3;
 
 
-
 --本次学生知识点得分情况表
 --正在进行多维钻取
 DROP TABLE IF EXISTS dw_tb_stu_point_score_v1;
@@ -246,16 +245,16 @@ pointrate FLOAT COMMENT '知识点得分率'
 LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_point_score_v1';
 INSERT INTO TABLE dw_tb_stu_point_score_v1
 SELECT t4.studentid,t4.studentname,t3.pointid,t5.pointname,t3.studentpointscore,t5.pointscore,(t3.studentpointscore/t5.pointscore) AS pointrate
-FROM
+FROM dw_tb_point_v2 AS t5
+JOIN dw_tb_stu_v1 AS t4
+ON t3.studentid = t4.studentid
+JOIN 
 (SELECT t1.studentid,t2.pointid,SUM(t1.studentscore*t2.proportion) AS studentpointscore
 FROM dw_tb_stu_problem_score_v2 AS t1
 JOIN dw_tb_question_point_v2 AS t2
 ON t1.problemid = t2.problemid
 GROUP BY t1.studentid,t2.pointid
 ) AS t3
-JOIN dw_tb_stu_v1 AS t4
-ON t3.studentid = t4.studentid
-JOIN dw_tb_point_v2 AS t5
 ON t3.pointid = t5.pointid;
 
 
