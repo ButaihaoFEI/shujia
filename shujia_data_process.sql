@@ -151,17 +151,16 @@ pointscore FLOAT COMMENT '知识点分值'
 LOCATION '/user/hadoop/shujia/dw/dw_tb_point_v2';
 INSERT INTO TABLE dw_tb_point_v2
 SELECT t4.pointid,t4.pointname,t4.parentid,t4.topid,t4.classhour,t4.frequency,t3.pointscore
-FROM 
-(SELECT t2.pointid, SUM(problemscore*proportion) AS pointscore
+FROM dw_tb_point_v1 AS t4
+JOIN (SELECT t2.pointid, SUM(problemscore*proportion) AS pointscore
 FROM dw_tb_problem_v1 AS t1
 JOIN dw_tb_question_point_v2 AS t2
 ON t1.problemid = t2.problemid
 GROUP BY t2.pointid) AS t3
-JOIN dw_tb_point_v1 AS t4
 ON t3.pointid = t4.pointid;
 
 
---本次试题题型表1.0
+--本次试题题型关系表1.0
 DROP TABLE IF EXISTS dw_tb_problem_questiontype_v1;
 CREATE TABLE IF NOT EXISTS dw_tb_problem_questiontype_v1(
 problemid STRING COMMENT '试题ID',
@@ -175,7 +174,7 @@ JOIN tb_exam_questiontype AS t2
 ON t1.problemid = t2.examquestionid;
 
 
---本次试题题型表2.0 添加试题包含题型占比，一题中有几个题型
+--本次试题题型关系表2.0 添加试题包含题型占比，一题中有几个题型
 DROP TABLE IF EXISTS dw_tb_problem_questiontype_v2;
 CREATE TABLE IF NOT EXISTS dw_tb_problem_questiontype_v2(
 problemid STRING COMMENT '试题ID',
@@ -190,6 +189,46 @@ FROM dw_tb_problem_questiontype_v1 AS t1 JOIN
 FROM dw_tb_problem_questiontype_v1
 GROUP BY problemid) t2
 ON t1.problemid = t2.problemid;
+
+
+--本次题型表1.0
+DROP TABLE IF EXISTS dw_tb_questiontype_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_questiontype_v1(
+questiontypeid STRING COMMENT '题型ID',
+questiontypename STRING COMMENT '题型名称',
+parentid STRING COMMENT '父节点ID',
+topid STRING COMMENT '一级知识点ID',
+frequency INT COMMENT '出现频率'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_questiontype_v1';
+INSERT INTO TABLE dw_tb_questiontype_v1
+SELECT t1.questiontypeid,questiontype_name,parent_id,top_id,replace(replace(replace(exam_frequency,2,10),3,50),4,250)
+FROM dw_tb_problem_questiontype_v2 AS t1
+JOIN tb_exam_questiontype_analysis AS t2
+ON t1.questiontypeid = t2.id;
+
+
+--本次题型表2.0
+DROP TABLE IF EXISTS dw_tb_questiontype_v2;
+CREATE TABLE IF NOT EXISTS dw_tb_questiontype_v2(
+questiontypeid STRING COMMENT '题型ID',
+questiontypename STRING COMMENT '题型名称',
+parentid STRING COMMENT '父节点ID',
+topid STRING COMMENT '一级知识点ID',
+frequency INT COMMENT '出现频率',
+questiontypescore FLOAT COMMENT '题型分值'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_questiontype_v2';
+INSERT INTO TABLE dw_tb_questiontype_v2
+SELECT t4.questiontypeid,questiontypename,parentid,topid,frequency,questiontypescore
+FROM dw_tb_questiontype_v1 AS t4
+JOIN
+(SELECT t2.questiontypeid, SUM(problemscore*proportion) AS questiontypescore
+FROM dw_tb_problem_v1 AS t1
+JOIN dw_tb_problem_questiontype_v2 AS t2
+ON t1.problemid = t2.problemid
+GROUP BY t2.questiontypeid) AS t3;
+
 
 
 --本次学生知识点得分情况表
