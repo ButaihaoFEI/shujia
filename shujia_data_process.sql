@@ -247,8 +247,6 @@ LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_point_score_v1';
 INSERT INTO TABLE dw_tb_stu_point_score_v1
 SELECT t4.studentid,t4.studentname,t3.pointid,t5.pointname,t3.studentpointscore,t5.pointscore,(t3.studentpointscore/t5.pointscore) AS pointrate
 FROM dw_tb_point_v2 AS t5
-JOIN dw_tb_stu_v1 AS t4
-ON t3.studentid = t4.studentid
 JOIN 
 (SELECT t1.studentid,t2.pointid,SUM(t1.studentscore*t2.proportion) AS studentpointscore
 FROM dw_tb_stu_problem_score_v2 AS t1
@@ -256,7 +254,9 @@ JOIN dw_tb_problem_point_v2 AS t2
 ON t1.problemid = t2.problemid
 GROUP BY t1.studentid,t2.pointid
 ) AS t3
-ON t3.pointid = t5.pointid;
+ON t3.pointid = t5.pointid
+JOIN dw_tb_stu_v1 AS t4
+ON t3.studentid = t4.studentid;
 
 
 --学生题型得分情况表
@@ -506,7 +506,7 @@ ON t4.problemtag = t5.problemtag;
 
 
 -- 插入表
-INSERT INTO TABLE tb_exam_student_points_scheme_detail
+--INSERT INTO TABLE tb_exam_student_points_scheme_detail
 SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-",""),examid,studentid,pointid,INT((scoreintervalpointrate-studentpointrate) * 100),t_value,INT(studentpointrate * 100),INT(scoreintervalpointrate * 100),1
 FROM view_examid  
 JOIN dw_tb_stu_recommand_point_v2;
