@@ -90,31 +90,31 @@ ORDER BY t1.classrank ASC, t1.problemnumber ASC;
 
 
 --本次试题知识点关系表 本次所遇到的试题及对应的知识点
-DROP TABLE IF EXISTS dw_tb_question_point_v1;
-CREATE TABLE IF NOT EXISTS dw_tb_question_point_v1(
+DROP TABLE IF EXISTS dw_tb_problem_point_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_problem_point_v1(
 problemid STRING COMMENT '试题ID',
 pointid STRING COMMENT '知识点ID'
 )
-LOCATION '/user/hadoop/shujia/dw/dw_tb_question_point_v1';
-INSERT INTO TABLE dw_tb_question_point_v1
+LOCATION '/user/hadoop/shujia/dw/dw_tb_problem_point_v1';
+INSERT INTO TABLE dw_tb_problem_point_v1
 SELECT problemid,pointid
 FROM tb_exam_question_point AS t1 JOIN dw_tb_problem_v1 AS t2
 ON  t1.examquestionid = t2.problemid;
 
 
 --本次试题知识点关系表2.0 添加试题包含知识点占比，一题中有几个知识点
-DROP TABLE IF EXISTS dw_tb_question_point_v2;
-CREATE TABLE IF NOT EXISTS dw_tb_question_point_v2(
+DROP TABLE IF EXISTS dw_tb_problem_point_v2;
+CREATE TABLE IF NOT EXISTS dw_tb_problem_point_v2(
 problemid STRING COMMENT '试题ID',
 pointid STRING COMMENT '知识点ID',
 proportion FLOAT COMMENT '试题对应 N个知识点，值为 1/N'
 )
-LOCATION '/user/hadoop/shujia/dw/dw_tb_question_point_v2';
-INSERT INTO TABLE dw_tb_question_point_v2
+LOCATION '/user/hadoop/shujia/dw/dw_tb_problem_point_v2';
+INSERT INTO TABLE dw_tb_problem_point_v2
 SELECT t1.problemid,t1.pointid,proportion
-FROM dw_tb_question_point_v1 AS t1 JOIN 
+FROM dw_tb_problem_point_v1 AS t1 JOIN 
 (SELECT problemid,1/COUNT(pointid) AS proportion
-FROM dw_tb_question_point_v1
+FROM dw_tb_problem_point_v1
 GROUP BY problemid) t2
 ON t1.problemid = t2.problemid;
 
@@ -134,7 +134,7 @@ INSERT INTO TABLE dw_tb_point_v1
 SELECT t2.pointid,pointname,parentid,topid,classhour,replace(replace(replace(frequency,2,10),3,50),4,250)
 FROM tb_syllabus_points AS t1 
 JOIN view_syllabusid AS v1 ON t1.syllabusid = v1.syllabusid
-JOIN dw_tb_question_point_v2 AS t2 ON t1.pointid = t2.pointid;
+JOIN dw_tb_problem_point_v2 AS t2 ON t1.pointid = t2.pointid;
 
 
 -- 本次知识点表2.0 计算知识点分值
@@ -154,7 +154,7 @@ SELECT t4.pointid,t4.pointname,t4.parentid,t4.topid,t4.classhour,t4.frequency,t3
 FROM dw_tb_point_v1 AS t4
 JOIN (SELECT t2.pointid, SUM(problemscore*proportion) AS pointscore
 FROM dw_tb_problem_v1 AS t1
-JOIN dw_tb_question_point_v2 AS t2
+JOIN dw_tb_problem_point_v2 AS t2
 ON t1.problemid = t2.problemid
 GROUP BY t2.pointid) AS t3
 ON t3.pointid = t4.pointid;
@@ -227,7 +227,8 @@ JOIN
 FROM dw_tb_problem_v1 AS t1
 JOIN dw_tb_problem_questiontype_v2 AS t2
 ON t1.problemid = t2.problemid
-GROUP BY t2.questiontypeid) AS t3;
+GROUP BY t2.questiontypeid) AS t3
+ON t4.questiontypeid = t3.questiontypeid;
 
 
 --本次学生知识点得分情况表
@@ -251,40 +252,67 @@ ON t3.studentid = t4.studentid
 JOIN 
 (SELECT t1.studentid,t2.pointid,SUM(t1.studentscore*t2.proportion) AS studentpointscore
 FROM dw_tb_stu_problem_score_v2 AS t1
-JOIN dw_tb_question_point_v2 AS t2
+JOIN dw_tb_problem_point_v2 AS t2
 ON t1.problemid = t2.problemid
 GROUP BY t1.studentid,t2.pointid
 ) AS t3
 ON t3.pointid = t5.pointid;
 
 
+--学生题型得分情况表
+DROP TABLE IF EXISTS dw_tb_stu_questiontype_score_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_stu_questiontype_score_v1(
+studentid STRING COMMENT '学生ID',
+studentname STRING COMMENT '学生姓名',
+questiontypeid STRING COMMENT '知识点ID',
+questiontypename STRING COMMENT '知识点名称',
+studentquestiontypescore FLOAT	COMMENT '学生知识点得分',
+questiontypescore FLOAT COMMENT '知识点分值',
+questiontyperate FLOAT COMMENT '知识点得分率'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_questiontype_score_v1';
+INSERT INTO TABLE dw_tb_stu_questiontype_score_v1
+SELECT t4.studentid,t4.studentname,t3.questiontypeid,t5.questiontypename,t3.studentquestiontypescore,t5.questiontypescore,(t3.studentquestiontypescore/t5.questiontypescore) AS questiontyperate
+FROM dw_tb_questiontype_v2 AS t5 
+JOIN
+(SELECT t1.studentid,t2.questiontypeid,SUM(t1.studentscore*t2.proportion) AS studentquestiontypescore
+FROM dw_tb_problem_questiontype_v2 AS t2
+JOIN dw_tb_stu_problem_score_v2 AS t1
+ON t1.problemid = t2.problemid
+GROUP BY t1.studentid,t2.questiontypeid
+) AS t3
+ON t3.questiontypeid = t5.questiontypeid
+JOIN dw_tb_stu_v1 AS t4
+ON t3.studentid = t4.studentid; 
+
+
 --得分区间表，区间从excel中设立
-DROP TABLE IF EXISTS dw_tb_scoreinterval_point_v1;
-CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval_point_v1(
+DROP TABLE IF EXISTS dw_tb_scoreinterval;
+CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval(
 totalscore int COMMENT '得分区间',
 interval_min int COMMENT '区间最小值',
 interval_max int COMMENT '区间最大值'
 )
 ROW FORMAT DELIMITED
 FIELDS TERMINATED BY ','
-LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval_point_v1';
+LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval';
 LOAD DATA LOCAL INPATH '/data/shujia/dw_tb_scoreinterval.csv'
-INTO TABLE dw_tb_scoreinterval_point_v1;
+INTO TABLE dw_tb_scoreinterval;
 
 
---得分区间2.0
-DROP TABLE IF EXISTS dw_tb_scoreinterval_point_v2;
-CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval_point_v2(
+--知识点得分区间1.0
+DROP TABLE IF EXISTS dw_tb_scoreinterval_point_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval_point_v1(
 totalscore int COMMENT '得分区间',
 student int COMMENT '该区间内学生人数',
 pointid STRING,
 pointrate_avg FLOAT COMMENT '该区间内学生该知识点平均得分率'
 )
-LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval_point_v2';
-INSERT INTO TABLE dw_tb_scoreinterval_point_v2
+LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval_point_v1';
+INSERT INTO TABLE dw_tb_scoreinterval_point_v1
 SELECT t4.totalscore,COUNT(t3.studentid),t3.pointid,IF(COUNT(t3.studentid) >1,AVG(t3.pointrate),t4.totalscore/150)
 FROM
-dw_tb_scoreinterval_point_v1 AS t4
+dw_tb_scoreinterval AS t4
 JOIN
 (SELECT t2.studentid,t2.studentname,totalscore,pointid,pointname,pointrate
 FROM dw_tb_stu_v1 AS t1
@@ -295,7 +323,7 @@ GROUP BY t4.totalscore,t3.pointid;
 
 
 
---推荐指标表1.0
+--推荐知识点指标表1.0
 DROP TABLE IF EXISTS dw_tb_stu_recommand_point_v1;
 CREATE TABLE IF NOT EXISTS dw_tb_stu_recommand_point_v1(
 studentid STRING COMMENT '学生ID',
@@ -315,14 +343,14 @@ FROM dw_tb_stu_v1 AS t1
 JOIN dw_tb_stu_point_score_v1 AS t2
 ON t1.studentid=t2.studentid
 ORDER BY t1.totalscore DESC) AS t3
-LEFT JOIN dw_tb_scoreinterval_point_v2 AS t4
+LEFT JOIN dw_tb_scoreinterval_point_v1 AS t4
 ON t3.pointid = t4.pointid
 WHERE t3.totalscore = t4.totalscore AND t3.studentpointrate < t4.pointrate_avg 
 ORDER BY t3.totalscore DESC,t3.studentname,difference DESC;
 
 
 
---推荐指标表2.0
+--推荐知识点指标表2.0
 DROP TABLE IF EXISTS dw_tb_stu_recommand_point_v2;
 CREATE TABLE IF NOT EXISTS dw_tb_stu_recommand_point_v2(
 studentid STRING COMMENT '学生ID',
@@ -344,6 +372,79 @@ FROM dw_tb_point_v2 AS t1
 JOIN dw_tb_stu_recommand_point_v1 AS t2
 ON t1.pointid = t2.pointid
 ORDER BY totalscore DESC,studentname,differencescore*frequency/t DESC;
+
+
+
+--题型得分区间1.0
+DROP TABLE IF EXISTS dw_tb_scoreinterval_questiontype_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_scoreinterval_questiontype_v1(
+totalscore int COMMENT '得分区间',
+student int COMMENT '该区间内学生人数',
+questiontypeid STRING,
+questiontyperate_avg FLOAT COMMENT '该区间内学生该题型平均得分率'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_scoreinterval_questiontype_v1';
+INSERT INTO TABLE dw_tb_scoreinterval_questiontype_v1
+SELECT t4.totalscore,COUNT(t3.studentid),t3.questiontypeid,IF(COUNT(t3.studentid) >1,AVG(t3.questiontyperate),t4.totalscore/150)
+FROM
+dw_tb_scoreinterval AS t4
+JOIN
+(SELECT t2.studentid,t2.studentname,totalscore,questiontypeid,questiontypename,questiontyperate
+FROM dw_tb_stu_v1 AS t1
+JOIN dw_tb_stu_questiontype_score_v1 AS t2
+ON t1.studentid = t2.studentid) AS t3
+WHERE (t3.totalscore >= t4.interval_min) AND (t3.totalscore <= t4.interval_max)
+GROUP BY t4.totalscore,t3.questiontypeid;
+
+
+
+--推荐题型指标表1.0
+DROP TABLE IF EXISTS dw_tb_stu_recommand_questiontype_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_stu_recommand_questiontype_v1(
+studentid STRING COMMENT '学生ID',
+studentname STRING COMMENT '学生姓名',
+totalscore INT COMMENT '学生总分',
+questiontypeid STRING COMMENT '学生欠缺题型ID',
+questiontypename STRING COMMENT '题型名称',
+studentquestiontyperate FLOAT COMMENT '学生该题型得分率',
+scoreintervalquestiontyperate FLOAT COMMENT'学生所在区间题型得分率',
+difference FLOAT COMMENT'学生所在区间该题型得分率与学生该题型得分率差值'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_recommand_questiontype_v1';
+INSERT INTO TABLE dw_tb_stu_recommand_questiontype_v1
+SELECT t3.studentid,t3.studentname,t3.totalscore,t3.questiontypeid,t3.questiontypename,t3.studentquestiontyperate,t4.questiontyperate_avg AS scoreintervalquestiontyperate, ROUND(t4.questiontyperate_avg - t3.studentquestiontyperate,2) AS difference
+FROM(SELECT t2.studentid,t2.studentname,t1.totalscore,t2.questiontypeid,t2.questiontypename,t2.questiontyperate AS studentquestiontyperate
+FROM dw_tb_stu_v1 AS t1
+JOIN dw_tb_stu_questiontype_score_v1 AS t2
+ON t1.studentid=t2.studentid
+ORDER BY t1.totalscore DESC) AS t3
+LEFT JOIN dw_tb_scoreinterval_questiontype_v1 AS t4
+ON t3.questiontypeid = t4.questiontypeid
+WHERE t3.totalscore = t4.totalscore AND t3.studentquestiontyperate < t4.questiontyperate_avg 
+ORDER BY t3.totalscore DESC,t3.studentname,difference DESC;
+
+
+--推荐知识点指标表2.0
+DROP TABLE IF EXISTS dw_tb_stu_recommand_questiontype_v2;
+CREATE TABLE IF NOT EXISTS dw_tb_stu_recommand_questiontype_v2(
+studentid STRING COMMENT '学生ID',
+studentname STRING COMMENT '学生姓名',
+totalscore INT COMMENT '学生总分',
+questiontypeid STRING COMMENT '学生欠缺题型ID',
+questiontypename STRING COMMENT '题型名称',
+studentquestiontyperate FLOAT COMMENT '学生该题型得分率',
+scoreintervalquestiontyperate FLOAT COMMENT'学生所在区间题型得分率',
+difference FLOAT COMMENT'学生所在区间该题型得分率与学生该题型得分率差值',
+differencescore FLOAT COMMENT '题型分值差距',
+frequency INT COMMENT '频率'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_recommand_questiontype_v2';
+INSERT INTO TABLE dw_tb_stu_recommand_questiontype_v2
+SELECT studentid,studentname,totalscore,t1.questiontypeid,t1.questiontypename,studentquestiontyperate,scoreintervalquestiontyperate,difference, difference * questiontypescore AS differencescore, frequency
+FROM dw_tb_questiontype_v2 AS t1
+JOIN dw_tb_stu_recommand_questiontype_v1 AS t2
+ON t1.questiontypeid = t2.questiontypeid
+ORDER BY totalscore DESC,studentname,differencescore*frequency DESC;
 
 
 --划分简单题，非简单题
@@ -369,8 +470,8 @@ JOIN dw_tb_problem_v1 AS t2
 ON t1.problemid = t2.problemid
 ORDER BY problemnumber ASC;
 
---给学生打上相应标签（发挥失常，能力有限）
 
+--给学生打上相应标签（发挥失常，能力有限）
 
 DROP TABLE IF EXISTS dw_tmp_student_score_tag;
 CREATE TABLE IF NOT EXISTS dw_tmp_student_score_tag(
