@@ -25,16 +25,25 @@ INTO TABLE dw_tb_stu_problem_score_v1;
 
 
 -- 试卷号ID
-DROP VIEW IF EXISTS view_examid;
-CREATE VIEW IF NOT EXISTS view_examid AS
+DROP TABLE IF EXISTS dw_variable_examid;
+CREATE TABLE IF NOT EXISTS dw_variable_examid AS
 SELECT examid FROM dw_tb_stu_problem_score_v1
 LIMIT 1;
 -- 考纲号ID
-DROP VIEW IF EXISTS view_syllabusid;
-CREATE VIEW IF NOT EXISTS view_syllabusid AS
+DROP TABLE IF EXISTS dw_variable_syllabusid;
+CREATE TABLE IF NOT EXISTS dw_variable_syllabusid AS
 SELECT DISTINCT syllabusid
 FROM tb_exam AS t1 JOIN dw_tb_stu_problem_score_v1 AS t2
 ON t1.id = t2.examid;
+-- 学校号班级号
+DROP TABLE IF EXISTS dw_variable_schoolid_classesid;
+CREATE TABLE IF NOT EXISTS dw_variable_schoolid_classesid AS
+SELECT DISTINCT schoolid,classesid
+FROM tb_student AS t1 JOIN
+(SELECT studentid FROM dw_tb_stu_problem_score_v1
+LIMIT 1) AS t2
+ON t1.studentid = t2.studentid;
+
 
 
 --学生名单表
@@ -63,7 +72,7 @@ problemscore FLOAT COMMENT '本试题分值'
 LOCATION '/user/hadoop/shujia/dw/dw_tb_problem_v1';
 INSERT INTO TABLE dw_tb_problem_v1
 SELECT id,questionno,score
-FROM tb_exam_question AS t1 JOIN view_examid AS v1
+FROM tb_exam_question AS t1 JOIN dw_variable_examid AS v1
 ON  t1.examid = v1.examid;
 
 
@@ -133,7 +142,7 @@ LOCATION '/user/hadoop/shujia/dw/dw_tb_point_v1';
 INSERT INTO TABLE dw_tb_point_v1
 SELECT t2.pointid,pointname,parentid,topid,classhour,replace(replace(replace(frequency,2,10),3,50),4,250)
 FROM tb_syllabus_points AS t1 
-JOIN view_syllabusid AS v1 ON t1.syllabusid = v1.syllabusid
+JOIN dw_variable_syllabusid AS v1 ON t1.syllabusid = v1.syllabusid
 JOIN dw_tb_problem_point_v2 AS t2 ON t1.pointid = t2.pointid;
 
 
@@ -505,9 +514,45 @@ ON t4.problemtag = t5.problemtag;
 
 
 
--- 插入表
+-- 插入知识点推荐表
 --INSERT INTO TABLE tb_exam_student_points_scheme_detail
 SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-",""),examid,studentid,pointid,INT((scoreintervalpointrate-studentpointrate) * 100),t_value,INT(studentpointrate * 100),INT(scoreintervalpointrate * 100),1
-FROM view_examid  
+FROM dw_variable_examid  
 JOIN dw_tb_stu_recommand_point_v2;
+
+-- 插入题型推荐
+--INSERT INTO TABLE tb_exam_student_questiontype_recommended_strategy
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-",""),examid,studentid,questiontypeid,INT(studentquestiontyperate * 100)
+from_unixtime(unix_timestamp(),'yyyy-MM-dd HH:mm:ss')
+
+
+-- 学生考试信息汇总
+-- INSERT INTO TABLE tb_exam_student
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-",""),studentid,examid,totalscore,,classrank,classrank,
+FROM dw_variable_examid
+JOIN dw_tb_stu_problem_score_v2
+
+SELECT classesranking,totalranking FROM tb_exam_student
+LIMIT 50;
+
+-- 本次出现的一级知识点
+-- 如果数据库有这次考试记录则更新知识点信息，否则新增这次考试记录 
+-- 1分40秒 特别慢，没有外键的连接，效率低
+-- INSERT INTO TABLE tb_exam_classes_point_group
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,examid,schoolid,topid
+FROM dw_variable_schoolid_classesid AS t1
+JOIN
+(SELECT examid,topid
+FROM dw_variable_examid AS t2
+JOIN (SELECT DISTINCT topid FROM dw_tb_point_v2) AS t3) AS t4;
+
+
+-- 本张试卷下班级得分标准差
+-- INSERT INTO TABLE tb_exam_classes_totalscore_std
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,examid,schoolid,classesid,std
+FROM dw_variable_schoolid_classesid AS t1
+JOIN 
+(SELECT examid,std 
+FROM dw_variable_examid AS t3
+JOIN (SELECT STDDEV(totalscore) AS std FROM dw_tb_stu_v1) AS t4 ) AS t2;
 
