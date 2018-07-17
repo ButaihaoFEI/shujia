@@ -128,7 +128,7 @@ GROUP BY problemid) t2
 ON t1.problemid = t2.problemid;
 
 
---本次知识点表1.0
+--本次叶知识点表1.0
 DROP TABLE IF EXISTS dw_tb_point_v1;
 CREATE TABLE IF NOT EXISTS dw_tb_point_v1(
 pointid STRING COMMENT '知识点ID',
@@ -146,7 +146,7 @@ JOIN dw_variable_syllabusid AS v1 ON t1.syllabusid = v1.syllabusid
 JOIN dw_tb_problem_point_v2 AS t2 ON t1.pointid = t2.pointid;
 
 
--- 本次知识点表2.0 计算知识点分值
+-- 本次叶知识点表2.0 计算知识点分值
 DROP TABLE IF EXISTS dw_tb_point_v2;
 CREATE TABLE IF NOT EXISTS dw_tb_point_v2(
 pointid STRING COMMENT '知识点ID',
@@ -167,6 +167,36 @@ JOIN dw_tb_problem_point_v2 AS t2
 ON t1.problemid = t2.problemid
 GROUP BY t2.pointid) AS t3
 ON t3.pointid = t4.pointid;
+
+--一级知识点表
+DROP TABLE IF EXISTS dw_tb_first_class_point_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_first_class_point_v1(
+pointid STRING COMMENT '知识点ID',
+pointname STRING COMMENT '知识点名称',
+pointscore FLOAT COMMENT '知识点分值'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_first_class_point_v1';
+INSERT INTO TABLE dw_tb_first_class_point_v1
+SELECT t2.pointid,pointname,pointscore
+FROM tb_syllabus_points AS t1
+JOIN
+(SELECT topid AS pointid,SUM(pointscore) AS pointscore
+FROM dw_tb_point_v2
+GROUP BY topid) AS t2
+ON t1.pointid = t2.pointid;
+
+--一级知识点得分表
+SELECT topid,SUM(studentpointscore) AS studentpointscore
+FROM
+(SELECT t2.pointid,topid,studentpointscore,pointscore
+FROM dw_tb_point_v2 AS t1
+JOIN
+(SELECT pointid,AVG(studentpointscore) AS studentpointscore
+FROM dw_tb_stu_point_score_v1
+GROUP BY pointid) AS t2
+ON t1.pointid = t2.pointid)
+GROUP BY topid;
+
 
 
 --本次试题题型关系表1.0
@@ -555,4 +585,13 @@ JOIN
 (SELECT examid,std 
 FROM dw_variable_examid AS t3
 JOIN (SELECT STDDEV(totalscore) AS std FROM dw_tb_stu_v1) AS t4 ) AS t2;
+
+-- 试题平均值
+-- INSERT INTO TABLE tb_exam_question_rate
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,examid,problemid,(studentscorerate_avg * 100) AS scorerate
+FROM dw_variable_examid
+JOIN dw_tb_problem_v2
+
+
+
 
