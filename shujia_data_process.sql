@@ -186,16 +186,22 @@ GROUP BY topid) AS t2
 ON t1.pointid = t2.pointid;
 
 --一级知识点得分表
+SELECT t4.topid,pointname,studentpointscore,pointscore,(studentpointscore/pointscore) AS pointrate
+FROM
+dw_tb_first_class_point_v1 AS t3
+JOIN
+(
 SELECT topid,SUM(studentpointscore) AS studentpointscore
 FROM
-(SELECT t2.pointid,topid,studentpointscore,pointscore
-FROM dw_tb_point_v2 AS t1
+(SELECT t1.pointid,topid,studentpointscore,pointscore
+FROM dw_tb_point_v2 AS t2
 JOIN
 (SELECT pointid,AVG(studentpointscore) AS studentpointscore
 FROM dw_tb_stu_point_score_v1
-GROUP BY pointid) AS t2
+GROUP BY pointid) AS t1
 ON t1.pointid = t2.pointid)
-GROUP BY topid;
+GROUP BY topid) AS t4
+ON t3.pointid=t4.topid;
 
 
 
