@@ -186,6 +186,16 @@ GROUP BY topid) AS t2
 ON t1.pointid = t2.pointid;
 
 --一级知识点得分表
+DROP TABLE IF EXISTS dw_tb_stu_first_class_point_score_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_stu_first_class_point_score_v1(
+pointid STRING COMMENT '一级知识点ID',
+pointname STRING COMMENT '一级知识点名称',
+studentpointscore FLOAT COMMENT '学生一级知识点得分平均值',
+pointscore FLOAT COMMENT '一级知识点分值',
+pointrate FLOAT COMMENT '一级知识点平均得分率'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_first_class_point_score_v1';
+INSERT INTO TABLE dw_tb_stu_first_class_point_score_v1
 SELECT t4.topid,pointname,studentpointscore,pointscore,(studentpointscore/pointscore) AS pointrate
 FROM
 dw_tb_first_class_point_v1 AS t3
@@ -194,15 +204,12 @@ JOIN
 SELECT topid,SUM(studentpointscore) AS studentpointscore
 FROM
 (SELECT t1.pointid,topid,studentpointscore,pointscore
-FROM dw_tb_point_v2 AS t2
-JOIN
-(SELECT pointid,AVG(studentpointscore) AS studentpointscore
-FROM dw_tb_stu_point_score_v1
-GROUP BY pointid) AS t1
-ON t1.pointid = t2.pointid)
-GROUP BY topid) AS t4
+FROM dw_tb_point_v2 AS t2 
+JOIN 
+(SELECT pointid,AVG(studentpointscore) AS studentpointscore FROM dw_tb_stu_point_score_v1 GROUP BY pointid) AS t1 
+ON t1.pointid = t2.pointid) AS t5
+GROUP BY t5.topid) AS t4
 ON t3.pointid=t4.topid;
-
 
 
 --本次试题题型关系表1.0
@@ -599,5 +606,9 @@ FROM dw_variable_examid
 JOIN dw_tb_problem_v2
 
 
-
+-- 知识点得分率情况
+-- INSERT INTO TABLE tb_exam_point_rate
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,examid,pointid,INT(pointrate * 100)
+FROM dw_variable_examid
+JOIN dw_tb_stu_first_class_point_score_v1;
 
