@@ -612,3 +612,15 @@ SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,exami
 FROM dw_variable_examid
 JOIN dw_tb_stu_first_class_point_score_v1;
 
+-- 每个学生每个试题得分率
+-- INSERT INTO TABLE tb_exam_student_question_rate
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id, examid,studentid,problemid,studentscore,(problemrate *100) AS scorerate
+FROM dw_variable_examid
+JOIN dw_tb_stu_problem_score_v2;
+
+-- 所有叶知识点得分率
+-- INSERT INTO TABLE tb_exam_student_point_rate_total
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,examid,studentid,pointid,(pointrate * 100) AS pointrate
+FROM dw_variable_examid
+JOIN dw_tb_stu_point_score_v1;
+
