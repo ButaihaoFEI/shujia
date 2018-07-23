@@ -29,10 +29,10 @@ DROP TABLE IF EXISTS dw_variable_examid;
 CREATE TABLE IF NOT EXISTS dw_variable_examid AS
 SELECT examid FROM dw_tb_stu_problem_score_v1
 LIMIT 1;
--- 考纲号ID
-DROP TABLE IF EXISTS dw_variable_syllabusid;
-CREATE TABLE IF NOT EXISTS dw_variable_syllabusid AS
-SELECT DISTINCT syllabusid
+-- 考纲号ID/卷面分值总分
+DROP TABLE IF EXISTS dw_variable_syllabusid_totalscore;
+CREATE TABLE IF NOT EXISTS dw_variable_syllabusid_totalscore AS
+SELECT DISTINCT examid,examtotalscore,syllabusid
 FROM tb_exam AS t1 JOIN dw_tb_stu_problem_score_v1 AS t2
 ON t1.id = t2.examid;
 -- 学校号班级号
@@ -43,7 +43,6 @@ FROM tb_student AS t1 JOIN
 (SELECT studentid FROM dw_tb_stu_problem_score_v1
 LIMIT 1) AS t2
 ON t1.studentid = t2.studentid;
-
 
 
 --学生名单表
@@ -60,6 +59,22 @@ INSERT INTO TABLE dw_tb_stu_v1
 SELECT DISTINCT studentid,studentname,totalscore,classrank
 FROM dw_tb_stu_problem_score_v1
 ORDER BY classrank ASC; 
+
+-- 学生名单表2.0
+DROP TABLE IF EXISTS dw_tb_stu_v2;
+CREATE TABLE IF NOT EXISTS dw_tb_stu_v2
+(
+studentid STRING COMMENT '学生ID',
+studentname STRING COMMENT '学生姓名',
+totalscore FLOAT COMMENT '试卷总分',
+classrank INT COMMENT '班级排名',
+targetscore FLOAT COMMENT '目标分，既总分加五分，不超过卷面分值'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_v2';
+INSERT INTO TABLE dw_tb_stu_v2
+SELECT studentid,studentname,totalscore,classrank,IF(totalscore + 5 < examtotalscore,totalscore + 5,examtotalscore)AS targetscore
+FROM dw_variable_syllabusid_totalscore
+JOIN dw_tb_stu_v1;  
 
 
 -- 本次题目表1.0 本次考试出现的试题以及其分值
@@ -142,7 +157,7 @@ LOCATION '/user/hadoop/shujia/dw/dw_tb_point_v1';
 INSERT INTO TABLE dw_tb_point_v1
 SELECT t2.pointid,pointname,parentid,topid,classhour,replace(replace(replace(frequency,2,10),3,50),4,250)
 FROM tb_syllabus_points AS t1 
-JOIN dw_variable_syllabusid AS v1 ON t1.syllabusid = v1.syllabusid
+JOIN dw_variable_syllabusid_totalscore AS v1 ON t1.syllabusid = v1.syllabusid
 JOIN dw_tb_problem_point_v2 AS t2 ON t1.pointid = t2.pointid;
 
 
@@ -186,16 +201,16 @@ GROUP BY topid) AS t2
 ON t1.pointid = t2.pointid;
 
 --一级知识点得分表
-DROP TABLE IF EXISTS dw_tb_stu_first_class_point_score_v1;
-CREATE TABLE IF NOT EXISTS dw_tb_stu_first_class_point_score_v1(
+DROP TABLE IF EXISTS dw_tb_class_first_class_point_score_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_class_first_class_point_score_v1(
 pointid STRING COMMENT '一级知识点ID',
 pointname STRING COMMENT '一级知识点名称',
 studentpointscore FLOAT COMMENT '学生一级知识点得分平均值',
 pointscore FLOAT COMMENT '一级知识点分值',
 pointrate FLOAT COMMENT '一级知识点平均得分率'
 )
-LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_first_class_point_score_v1';
-INSERT INTO TABLE dw_tb_stu_first_class_point_score_v1
+LOCATION '/user/hadoop/shujia/dw/dw_tb_class_first_class_point_score_v1';
+INSERT INTO TABLE dw_tb_class_first_class_point_score_v1
 SELECT t4.topid,pointname,studentpointscore,pointscore,(studentpointscore/pointscore) AS pointrate
 FROM
 dw_tb_first_class_point_v1 AS t3
@@ -557,6 +572,37 @@ ON t4.problemtag = t5.problemtag;
 
 
 
+
+
+
+-- 高考预测分gaokao_score以及高考预测分上限gaokao_promote_score
+DROP TABLE IF EXISTS dw_tb_stu_first_class_point_score_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_stu_first_class_point_score_v1(
+studentid STRING COMMENT '学生id',
+studentname STRING COMMENT '学生姓名',
+pointid STRING COMMENT '一级知识点ID',
+pointname STRING COMMENT '一级知识点名称',
+studentpointscore FLOAT COMMENT '学生一级知识点得分',
+pointscore FLOAT COMMENT '一级知识点分值',
+pointrate FLOAT COMMENT '一级知识点平均得分率'
+)
+LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_first_class_point_score_v1';
+INSERT INTO TABLE dw_tb_stu_first_class_point_score_v1
+SELECT t5.studentid,studentname,topid,pointname,studentpointscore,pointscore,(studentpointscore/pointscore) AS pointrate
+FROM
+(SELECT studentid,topid, SUM(studentpointscore) AS studentpointscore
+FROM dw_tb_stu_point_score_v1 AS t1
+JOIN dw_tb_point_v2 AS t2
+ON t1.pointid = t2.pointid
+GROUP BY studentid,topid) AS t3
+JOIN dw_tb_first_class_point_v1 AS t4
+ON t3.topid = t4.pointid
+JOIN dw_tb_stu_v2 AS t5
+ON t3.studentid = t5.studentid;
+
+
+
+
 -- 插入知识点推荐表
 --INSERT INTO TABLE tb_exam_student_points_scheme_detail
 SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-",""),examid,studentid,pointid,INT((scoreintervalpointrate-studentpointrate) * 100),t_value,INT(studentpointrate * 100),INT(scoreintervalpointrate * 100),1
@@ -571,12 +617,11 @@ from_unixtime(unix_timestamp(),'yyyy-MM-dd HH:mm:ss')
 
 -- 学生考试信息汇总
 -- INSERT INTO TABLE tb_exam_student
-SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-",""),studentid,examid,totalscore,,classrank,classrank,
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-",""),studentid,examid,totalscore,classrank,classrank,
 FROM dw_variable_examid
 JOIN dw_tb_stu_problem_score_v2
 
-SELECT classesranking,totalranking FROM tb_exam_student
-LIMIT 50;
+
 
 -- 本次出现的一级知识点
 -- 如果数据库有这次考试记录则更新知识点信息，否则新增这次考试记录 
@@ -603,14 +648,20 @@ JOIN (SELECT STDDEV(totalscore) AS std FROM dw_tb_stu_v1) AS t4 ) AS t2;
 -- INSERT INTO TABLE tb_exam_question_rate
 SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,examid,problemid,(studentscorerate_avg * 100) AS scorerate
 FROM dw_variable_examid
-JOIN dw_tb_problem_v2
+JOIN dw_tb_problem_v2;
+
+-- 班级试题平均得分率
+-- INSERT INTO TABLE tb_exam_classes_question_rate
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,classesid,problemid,(studentscorerate_avg * 100) AS studentscorerate_avg
+FROM dw_variable_schoolid_classesid
+JOIN dw_tb_problem_v2;
 
 
--- 知识点得分率情况
+-- 一级知识点得分率情况
 -- INSERT INTO TABLE tb_exam_point_rate
 SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,examid,pointid,INT(pointrate * 100)
 FROM dw_variable_examid
-JOIN dw_tb_stu_first_class_point_score_v1;
+JOIN dw_tb_class_first_class_point_score_v1;
 
 -- 每个学生每个试题得分率
 -- INSERT INTO TABLE tb_exam_student_question_rate
@@ -624,3 +675,25 @@ SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,exami
 FROM dw_variable_examid
 JOIN dw_tb_stu_point_score_v1;
 
+-- 所有题型得分率
+-- INSERT INTO TABLE tb_exam_student_questiontype_rate_total
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,examid,studentid,questiontypeid,(questiontyperate * 100) AS questiontyperate
+FROM dw_variable_examid
+JOIN dw_tb_stu_questiontype_score_v1;
+
+-- 记录知识点知识图谱 （叶知识点 直系父知识点）
+-- 1.插入叶知识点数据
+-- INSERT INTO TABLE tb_exam_student_point_figure
+SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-","") AS id,examid,studentid,pointid,studentpointrate,parentid,topid
+FROM dw_variable_examid
+JOIN 
+(
+SELECT studentid,t2.pointid,INT(studentpointrate * 100) AS studentpointrate,parentid,topid
+FROM dw_tb_point_v2 AS t1
+JOIN dw_tb_stu_recommand_point_v2 AS t2
+ON t1.pointid = t2.pointid
+) AS t3;
+
+
+-- 记录本校学生相关指标
+-- INSERT INTO TABLE tb_exam_school_score
