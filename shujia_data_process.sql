@@ -572,9 +572,6 @@ ON t4.problemtag = t5.problemtag;
 
 
 
-
-
-
 -- 高考预测分gaokao_score以及高考预测分上限gaokao_promote_score
 DROP TABLE IF EXISTS dw_tb_stu_first_class_point_score_v1;
 CREATE TABLE IF NOT EXISTS dw_tb_stu_first_class_point_score_v1(
@@ -601,6 +598,24 @@ JOIN dw_tb_stu_v2 AS t5
 ON t3.studentid = t5.studentid;
 
 
+DROP TABLE IF EXISTS dw_tb_stu_gaokao_score_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_stu_gaokao_score_v1 AS
+SELECT studentid,SUM(IF(pointrate IS NOT NULL,pointrate,1) * syllabusrate * examtotalscore) AS gaokao_score
+FROM
+(SELECT t5.studentid,t5.studentname,t5.pointname,syllabusrate,examtotalscore,pointrate
+FROM 
+(SELECT studentid,studentname,pointname,syllabusrate,examtotalscore
+FROM dw_tb_stu_v2 AS t3
+JOIN (SELECT t1.syllabusid,toppointname AS pointname,syllabusrate,examtotalscore
+FROM tb_syllabus_top_point AS t1
+JOIN dw_variable_syllabusid_totalscore AS t2
+ON t1.syllabusid = t2.syllabusid) AS t4) AS t5
+LEFT JOIN 
+dw_tb_stu_first_class_point_score_v1 AS t6
+ON t5.studentid = t6.studentid AND t5.pointname = t6.pointname) AS t7
+GROUP BY studentid;
+
+
 
 
 -- 插入知识点推荐表
@@ -620,7 +635,6 @@ from_unixtime(unix_timestamp(),'yyyy-MM-dd HH:mm:ss')
 SELECT regexp_replace(reflect("java.util.UUID","randomUUID"),"-",""),studentid,examid,totalscore,classrank,classrank,
 FROM dw_variable_examid
 JOIN dw_tb_stu_problem_score_v2
-
 
 
 -- 本次出现的一级知识点
