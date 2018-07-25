@@ -412,7 +412,7 @@ ON t1.studentid=t2.studentid
 ORDER BY t1.totalscore DESC) AS t3
 LEFT JOIN dw_tb_scoreinterval_point_v1 AS t4
 ON t3.pointid = t4.pointid
-WHERE t3.totalscore = t4.totalscore AND t3.studentpointrate < t4.pointrate_avg 
+WHERE t3.totalscore = t4.totalscore AND t3.studentpointrate < t4.pointrate_avg AND ROUND(t4.pointrate_avg - t3.studentpointrate,2) > 0.039
 ORDER BY t3.totalscore DESC,t3.studentname,difference DESC;
 
 
