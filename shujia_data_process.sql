@@ -491,7 +491,7 @@ WHERE t3.totalscore = t4.totalscore AND t3.studentquestiontyperate < t4.question
 ORDER BY t3.totalscore DESC,t3.studentname,difference DESC;
 
 
---推荐知识点指标表2.0
+--推荐题型指标表2.0
 DROP TABLE IF EXISTS dw_tb_stu_recommand_questiontype_v2;
 CREATE TABLE IF NOT EXISTS dw_tb_stu_recommand_questiontype_v2(
 studentid STRING COMMENT '学生ID',
@@ -539,7 +539,6 @@ ORDER BY problemnumber ASC;
 
 
 --给学生打上相应标签（发挥失常，能力有限）
-
 DROP TABLE IF EXISTS dw_tmp_student_score_tag;
 CREATE TABLE IF NOT EXISTS dw_tmp_student_score_tag(
 studentid STRING COMMENT '学生ID',
@@ -597,23 +596,66 @@ ON t3.topid = t4.pointid
 JOIN dw_tb_stu_v2 AS t5
 ON t3.studentid = t5.studentid;
 
+-- 高考考纲知识点分布，分值情况
+DROP TABLE IF EXISTS dw_tb_gaokao_point_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_gaokao_point_v1 
+LOCATION '/user/hadoop/shujia/dw/dw_tb_gaokao_point_v1'AS
+SELECT t1.syllabusid,toppointname AS pointname,syllabusrate,examtotalscore
+FROM tb_syllabus_top_point AS t1
+JOIN dw_variable_syllabusid_totalscore AS t2
+ON t1.syllabusid = t2.syllabusid;
+
 
 DROP TABLE IF EXISTS dw_tb_stu_gaokao_score_v1;
-CREATE TABLE IF NOT EXISTS dw_tb_stu_gaokao_score_v1 AS
+CREATE TABLE IF NOT EXISTS dw_tb_stu_gaokao_score_v1 
+LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_gaokao_score_v1' AS
 SELECT studentid,SUM(IF(pointrate IS NOT NULL,pointrate,1) * syllabusrate * examtotalscore) AS gaokao_score
 FROM
 (SELECT t5.studentid,t5.studentname,t5.pointname,syllabusrate,examtotalscore,pointrate
 FROM 
 (SELECT studentid,studentname,pointname,syllabusrate,examtotalscore
 FROM dw_tb_stu_v2 AS t3
-JOIN (SELECT t1.syllabusid,toppointname AS pointname,syllabusrate,examtotalscore
-FROM tb_syllabus_top_point AS t1
-JOIN dw_variable_syllabusid_totalscore AS t2
-ON t1.syllabusid = t2.syllabusid) AS t4) AS t5
+JOIN dw_tb_gaokao_point_v1 AS t4) AS t5
 LEFT JOIN 
 dw_tb_stu_first_class_point_score_v1 AS t6
 ON t5.studentid = t6.studentid AND t5.pointname = t6.pointname) AS t7
 GROUP BY studentid;
+
+
+-- 高考得分上限
+DROP TABLE IF EXISTS dw_tb_stu_gaokao_promote_score_v1;
+CREATE TABLE IF NOT EXISTS dw_tb_stu_gaokao_promote_score_v1 
+LOCATION '/user/hadoop/shujia/dw/dw_tb_stu_gaokao_promote_score_v1' AS
+SELECT t11.studentid,(gaokao_score + gaokao_promote_score) AS gaokao_promote_score
+FROM
+dw_tb_stu_gaokao_score_v1 AS t11
+JOIN
+(SELECT studentid,pointid,t8.pointname,(promote_score_rate * syllabusrate * examtotalscore) AS gaokao_promote_score
+FROM
+dw_tb_gaokao_point_v1 AS t9
+JOIN
+(SELECT studentid,t6.pointid,pointname,promote_score_rate
+FROM
+dw_tb_first_class_point_v1 AS t7
+JOIN
+(SELECT studentid,t5.pointid,(promote_score/pointscore) AS promote_score_rate
+FROM
+dw_tb_first_class_point_v1 AS t5
+JOIN
+(SELECT studentid,topid,SUM(difference * pointscore) AS promote_score
+FROM
+(SELECT studentid,t2.pointid AS pointid,topid,difference,pointscore
+FROM dw_tb_point_v2 AS t1
+JOIN dw_tb_stu_recommand_point_v2 AS t2
+ON t1.pointid = t2.pointid) AS t3
+GROUP BY studentid,topid) AS t4
+ON t5.pointid = t4.topid) AS t6
+ON t7.pointid = t6.pointid) AS t8
+ON t8.pointname = t9.pointname) AS t10
+ON t11.studentid = t10.studentid
+LIMIT 50;
+
+
 
 
 
