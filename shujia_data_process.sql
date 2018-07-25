@@ -750,6 +750,6 @@ JOIN dw_tb_stu_recommand_point_v2 AS t2
 ON t1.pointid = t2.pointid
 ) AS t3;
 
-
+--
 -- 记录本校学生相关指标
 -- INSERT INTO TABLE tb_exam_school_score
